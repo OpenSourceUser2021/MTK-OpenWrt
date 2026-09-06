@@ -46,7 +46,7 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     permissions:
       contents: write
@@ -73,7 +73,7 @@ jobs:
       run: |
         sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
         sudo -E apt-get -qq update
-        sudo -E apt-get -qq install $(curl -fsSL https://is.gd/depend_ubuntu2204_openwrt)
+        sudo -E apt-get -qq install --no-install-recommends $(cat "$GITHUB_WORKSPACE/.github/build-depends.txt")
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
@@ -81,7 +81,7 @@ jobs:
         sudo chown $USER:$GROUPS /workdir
         
     - name: 清理磁盘空间(Ubuntu)
-      uses: jlumbroso/free-disk-space@main
+      uses: jlumbroso/free-disk-space@v1.3.1
       with:
         # this might remove tools that are actually needed,
         # when set to "true" but frees about 6 GB
@@ -96,14 +96,14 @@ jobs:
         swap-storage: false
         
     - name: Combine Disks
-      uses: easimon/maximize-build-space@master
+      uses: easimon/maximize-build-space@v10
       with:
         swap-size-mb: 1024
         temp-reserve-mb: 100
         root-reserve-mb: 1024
         
     - name: Checkout
-      uses: actions/checkout@main
+      uses: actions/checkout@v5
       
     - name: 下载固件源码
       run: |
@@ -128,7 +128,7 @@ jobs:
         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
         
     - name: Cache Toolchain
-      uses: HiGarfield/cachewrtbuild@main
+      uses: HiGarfield/cachewrtbuild@3c396d6d42253c392a1c7c2ca996869c3d5b5853
       with:
         ccache: false
         mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
@@ -244,7 +244,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: 打包上传固件到Actions Artifacts
-      uses: actions/upload-artifact@main
+      uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: ${{ env.FILE_DATE }}-${{ env.OPENWRT_NAME }}-${{ env.UPLOAD_TAG_NAME }}
