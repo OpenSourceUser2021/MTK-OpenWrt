@@ -10,66 +10,50 @@
 # Description: OpenWrt DIY script part 2 (After Update feeds)
 #
 
-# golang only for 21.xx and 23.xx
-#rm -rf feeds/packages/lang/golang
-#git clone --depth 1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
-
-# fix alist build fail issue -> https://github.com/sbwml/luci-app-alist
-sudo -E apt-get -qq install libfuse-dev
-
-### alist
-#rm -rf feeds/packages/net/alist
-#rm -rf feeds/luci/applications/luci-app-alist
-#git clone --depth 1 https://github.com/sbwml/openwrt-alist.git package/custom/luci-app-alist
-
-### wechatpush
-#rm -rf feeds/luci/applications/luci-app-wechatpush
-#git clone --depth 1 https://github.com/tty228/luci-app-wechatpush.git package/custom/luci-app-wechatpush
-
-### use official openclash source and Mihomo
-#rm -rf feeds/luci/applications/luci-app-openclash
-#git clone --depth 1 https://github.com/vernesong/OpenClash.git package/custom/luci-app-openclash
-#git clone --depth 1 https://github.com/morytyann/OpenWrt-mihomo.git package/custom/OpenWrt-mihomo
-
-# remove openwrt/package  and use immortalwrt/package
-# rm -rf feeds/packages/net/zerotier
-
-# fix linux kernel 6.6.x udp issue
-# compare files with https://github.com/coolsnowwolf/lede/tree/master/target/linux/generic then del all different files
-#rm -rf target/linux/generic/hack-6.6/600-net-enable-fraglist-GRO-by-default.patch
-#rm -rf target/linux/generic/pending-6.6/680-net-add-TCP-fraglist-GRO-support.patch
-#rm -rf target/linux/generic/pending-6.6/681-net-remove-NETIF_F_GSO_FRAGLIST-from-NETIF_F_GSO_SOF.patch
-#rm -rf target/linux/generic/pending-6.6/684-gso-fix-gso-fraglist-segmentation-after-pull-from-fr.patch
-#rm -rf target/linux/generic/pending-6.6/685-net-gso-fix-tcp-fraglist-segmentation-after-pull-fro.patch
-#rm -rf target/linux/generic/backport-6.6/611-01-v6.11-udp-Allow-GSO-transmit-from-devices-with-no-checksum.patch
-#rm -rf target/linux/generic/backport-6.6/611-02-v6.11-net-Make-USO-depend-on-CSUM-offload.patch
-#rm -rf target/linux/generic/backport-6.6/611-03-v6.11-udp-Fall-back-to-software-USO-if-IPv6-extension-head.patch
+# 任何一步失败立即退出；管道中任一命令失败也视为失败（防止下载失败产生损坏文件）
+set -euo pipefail
 
 # 预置openclash内核
+# 带重试与产物校验的下载函数：网络抖动时宁可构建失败，也不产出损坏文件
+# 用法: fetch <url> <输出文件> <最小字节数>
+fetch() {
+	local url="$1" out="$2" min_size="$3" tmp attempt=0
+	tmp="$(mktemp)"
+	while [ "$attempt" -lt 5 ]; do
+		attempt=$((attempt + 1))
+		echo ">>> [$attempt/5] 下载 $url"
+		if wget --timeout=30 --tries=3 -qO "$tmp" "$url" && [ "$(stat -c%s "$tmp")" -ge "$min_size" ]; then
+			mkdir -p "$(dirname "$out")"
+			mv "$tmp" "$out"
+			echo ">>> 完成：$out"
+			return 0
+		fi
+		rm -f "$tmp"
+		sleep 3
+	done
+	echo "!!! 下载失败：$url" >&2
+	return 1
+}
+
 mkdir -p files/etc/openclash/core
 CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
 GEOIP_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
 GEOSITE_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-wget -qO- $CLASH_META_URL | tar xOvz > files/etc/openclash/core/clash_meta
-wget -qO- $GEOIP_URL > files/etc/openclash/GeoIP.dat
-wget -qO- $GEOSITE_URL > files/etc/openclash/GeoSite.dat
+
+# 先下载压缩包到临时文件并校验大小，再解压，避免管道中段失败产生损坏内核
+CLASH_TGZ="$(mktemp)"
+trap 'rm -f "$CLASH_TGZ"' EXIT
+fetch "$CLASH_META_URL" "$CLASH_TGZ" 1048576        # tar.gz 至少 1MB
+tar xOzf "$CLASH_TGZ" > files/etc/openclash/core/clash_meta
+if [ "$(stat -c%s files/etc/openclash/core/clash_meta)" -lt 10485760 ]; then   # 二进制至少 10MB
+	echo "!!! clash_meta 解压结果异常，中止构建" >&2
+	exit 1
+fi
+
+fetch "$GEOIP_URL" files/etc/openclash/GeoIP.dat 1048576      # 至少 1MB
+fetch "$GEOSITE_URL" files/etc/openclash/GeoSite.dat 1048576  # 至少 1MB
+
 # 给内核权限
 chmod +x files/etc/openclash/core/clash*
 
-# Modify default IP
-#sed -i 's/192.168.1.1/192.168.50.5/g' package/base-files/files/bin/config_generate
-##-----------------Del duplicate packages------------------
-#rm -rf feeds/packages/net/open-app-filter
-##-----------------Add OpenClash dev core------------------
-#curl -sL -m 30 --retry 2 https://raw.githubusercontent.com/vernesong/OpenClash/core/master/dev/clash-linux-arm64.tar.gz -o /tmp/clash.tar.gz
-#tar zxvf /tmp/clash.tar.gz -C /tmp >/dev/null 2>&1
-#chmod +x /tmp/clash >/dev/null 2>&1
-#mkdir -p feeds/luci/applications/luci-app-openclash/root/etc/openclash/core
-#mv /tmp/clash feeds/luci/applications/luci-app-openclash/root/etc/openclash/core/clash >/dev/null 2>&1
-#rm -rf /tmp/clash.tar.gz >/dev/null 2>&1
-##-----------------Delete DDNS's examples-----------------
-#sed -i '/myddns_ipv4/,$d' feeds/packages/net/ddns-scripts/files/etc/config/ddns
 
-# fix 802.11r +PSK-SAE ,apple device can't connect issue
-# ref https://github.com/openwrt/openwrt/issues/7858
-#??? sed -i 's/\[ "${ieee80211w:-0}" -gt 0 \] \&\& append wpa_key_mgmt "WPA-PSK-SHA256"/\[ "${ieee80211w:-0}" -gt 1 \] \&\& append wpa_key_mgmt "WPA-PSK-SHA256"/g' package/network/config/wifi-scripts/files/lib/netifd/hostapd.sh

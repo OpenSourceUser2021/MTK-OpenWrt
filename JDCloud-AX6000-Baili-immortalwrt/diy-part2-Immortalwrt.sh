@@ -10,50 +10,49 @@
 # Description: OpenWrt DIY script part 2 (After Update feeds)
 #
 
-# golang only for 21.xx and 23.xx
-#rm -rf feeds/packages/lang/golang
-#git clone --depth 1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
-
-# fix alist build fail issue -> https://github.com/sbwml/luci-app-alist
-sudo -E apt-get -qq install libfuse-dev
-
-
-# fix upgrade failure issue , official repository fix
-#rm -f target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh
-#cp $GITHUB_WORKSPACE/JDCloud-AX6000-Baili-immortalwrt/mod_files/platform.sh target/linux/mediatek/filogic/base-files/lib/upgrade/platform.sh
-
+# 任何一步失败立即退出；管道中任一命令失败也视为失败（防止下载失败产生损坏文件）
+set -euo pipefail
 
 # 预置openclash内核
+# 带重试与产物校验的下载函数：网络抖动时宁可构建失败，也不产出损坏文件
+# 用法: fetch <url> <输出文件> <最小字节数>
+fetch() {
+	local url="$1" out="$2" min_size="$3" tmp attempt=0
+	tmp="$(mktemp)"
+	while [ "$attempt" -lt 5 ]; do
+		attempt=$((attempt + 1))
+		echo ">>> [$attempt/5] 下载 $url"
+		if wget --timeout=30 --tries=3 -qO "$tmp" "$url" && [ "$(stat -c%s "$tmp")" -ge "$min_size" ]; then
+			mkdir -p "$(dirname "$out")"
+			mv "$tmp" "$out"
+			echo ">>> 完成：$out"
+			return 0
+		fi
+		rm -f "$tmp"
+		sleep 3
+	done
+	echo "!!! 下载失败：$url" >&2
+	return 1
+}
+
 mkdir -p files/etc/openclash/core
 CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
 GEOIP_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
 GEOSITE_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
-wget -qO- $CLASH_META_URL | tar xOvz > files/etc/openclash/core/clash_meta
-wget -qO- $GEOIP_URL > files/etc/openclash/GeoIP.dat
-wget -qO- $GEOSITE_URL > files/etc/openclash/GeoSite.dat
+
+# 先下载压缩包到临时文件并校验大小，再解压，避免管道中段失败产生损坏内核
+CLASH_TGZ="$(mktemp)"
+trap 'rm -f "$CLASH_TGZ"' EXIT
+fetch "$CLASH_META_URL" "$CLASH_TGZ" 1048576        # tar.gz 至少 1MB
+tar xOzf "$CLASH_TGZ" > files/etc/openclash/core/clash_meta
+if [ "$(stat -c%s files/etc/openclash/core/clash_meta)" -lt 10485760 ]; then   # 二进制至少 10MB
+	echo "!!! clash_meta 解压结果异常，中止构建" >&2
+	exit 1
+fi
+
+fetch "$GEOIP_URL" files/etc/openclash/GeoIP.dat 1048576      # 至少 1MB
+fetch "$GEOSITE_URL" files/etc/openclash/GeoSite.dat 1048576  # 至少 1MB
+
 # 给内核权限
 chmod +x files/etc/openclash/core/clash*
 
-# Modify default IP
-#sed -i 's/192.168.1.1/192.168.50.5/g' package/base-files/files/bin/config_generate
-##-----------------Del duplicate packages------------------
-#rm -rf feeds/packages/net/open-app-filter
-##-----------------Add OpenClash dev core------------------
-#curl -sL -m 30 --retry 2 https://raw.githubusercontent.com/vernesong/OpenClash/core/master/dev/clash-linux-arm64.tar.gz -o /tmp/clash.tar.gz
-#tar zxvf /tmp/clash.tar.gz -C /tmp >/dev/null 2>&1
-#chmod +x /tmp/clash >/dev/null 2>&1
-#mkdir -p feeds/luci/applications/luci-app-openclash/root/etc/openclash/core
-#mv /tmp/clash feeds/luci/applications/luci-app-openclash/root/etc/openclash/core/clash >/dev/null 2>&1
-#rm -rf /tmp/clash.tar.gz >/dev/null 2>&1
-##-----------------Delete DDNS's examples-----------------
-sed -i '/myddns_ipv4/,$d' feeds/packages/net/ddns-scripts/files/etc/config/ddns
-
-# enable wifi by default
-#sed -i "s/set \${s}\.disabled='[^']*'/set \${s}.disabled='0'/g"  package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc
-
-# update default SSID
-#sed -i "s/set \${si}\.ssid='\${defaults?.ssid || \"OpenWrt\"}'/set \${si}.ssid='\${defaults?.ssid || \"OpenWrt-WiFi\"}'/g" package/network/config/wifi-scripts/files/lib/wifi/mac80211.uc
-
-# fix 802.11r +PSK-SAE ,apple device can't connect issue
-# ref https://github.com/openwrt/openwrt/issues/7858
-#??? sed -i 's/\[ "${ieee80211w:-0}" -gt 0 \] \&\& append wpa_key_mgmt "WPA-PSK-SHA256"/\[ "${ieee80211w:-0}" -gt 1 \] \&\& append wpa_key_mgmt "WPA-PSK-SHA256"/g' package/network/config/wifi-scripts/files/lib/netifd/hostapd.sh

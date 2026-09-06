@@ -1,0 +1,21 @@
+# 统一行尾，避免 Windows 上 core.autocrlf 导致仓库内外行尾不一致。
+# CI(Linux) 下 shell 脚本若含 CRLF 会报 $'\r': command not found，
+# 因此所有脚本/配置强制 LF 存储。
+
+* text=auto eol=lf
+
+*.sh        text eol=lf
+*.conf      text eol=lf
+*.config    text eol=lf
+*.default   text eol=lf
+
+# 二进制文件不做行尾与文本处理
+*.bin       binary
+*.img       binary
+*.itb       binary
+*.ubi       binary
+*.gz        binary
+*.tar       binary
+*.xz        binary
+*.dat       binary
+*.fip       binary
