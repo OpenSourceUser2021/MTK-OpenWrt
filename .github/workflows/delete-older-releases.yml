@@ -1,27 +1,63 @@
-name: delete-older-releases
+name: delete-older-releases-and-runs
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 22 * * *' # 建议将 cron 表达式用单引号包裹起来
+    - cron: '0 22 * * *'
     
 jobs:
-  del_runs:
+  cleanup:
     runs-on: ubuntu-24.04
     permissions:
       contents: write  # 删除 Release 与 tag 所需
       actions: write   # 删除旧工作流运行记录所需
     steps:
-    
-      - name: Delete old workflow runs
-        uses: iamazeem/delete-workflow-runs-action@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          retain_days: 7
-          keep: 3 # 每个工作流至少保留最近的 3 个记录
-          
-      - name: Delete older releases using GH CLI
+      - name: Clean up old workflow runs and releases using GH CLI
         run: |
-          # 获取所有 Release 的 Tag 名称，跳过最近的 3 个（按创建时间倒序），并批量删除
-          gh release list --limit 100 --json tagName -q '.[].tagName' | tail -n +4 | xargs -I {} gh release delete {} --yes --cleanup-tag
+          echo "=== 开始清理 7 天前且排名在 7 之后的旧工作流记录 ==="
+          
+          # 计算 7 天前的 UTC 时间戳
+          THRESHOLD_DATE=$(date -u -d "7 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+          echo "工作流截止时间: $THRESHOLD_DATE"
+
+          # 1. 获取当前仓库中所有可用的工作流 ID
+          WORKFLOW_IDS=$(gh api repos/${{ github.repository }}/workflows --jq '.workflows[].id')
+
+          # 2. 循环处理每一个工作流
+          for WF_ID in $WORKFLOW_IDS; do
+            echo "正在检查工作流 ID: $WF_ID"
+            
+            # 列出该工作流的所有运行记录，跳过最新的 7 条记录 (tail -n +8)
+            OLD_RUNS=$(gh run list --workflow $WF_ID --limit 500 --json databaseId,createdAt -q '.[] | "\(.databaseId) \(.createdAt)"' | tail -n +8)
+            
+            if [ -z "$OLD_RUNS" ]; then
+              echo "没有符合删除条件（排在7名之后）的记录。"
+              continue
+            fi
+
+            # 遍历并判断是否超过 7 天
+            echo "$OLD_RUNS" | while read -r RUN_ID RUN_DATE; do
+              if [ "$RUN_DATE" < "$THRESHOLD_DATE" ]; then
+                echo "删除运行记录 ID: $RUN_ID (创建时间: $RUN_DATE)"
+                gh run delete $RUN_ID --yes || true
+              fi
+            done
+          done
+
+          echo "=== 开始清理 7 天前且排名在 7 之后的旧 Releases ==="
+          
+          # 获取所有 Release 的创建时间和 Tag 名字
+          # 过滤掉最新 7 个 (tail -n +8)，再结合时间戳删除旧版本及绑定的 Git Tag
+          OLD_RELEASES=$(gh release list --limit 200 --json tagName,createdAt -q '.[] | "\(.tagName) \(.createdAt)"' | tail -n +8)
+          
+          if [ -z "$OLD_RELEASES" ]; then
+            echo "没有符合删除条件（排在7名之后）的 Release。"
+          else
+            echo "$OLD_RELEASES" | while read -r TAG_NAME REL_DATE; do
+              if [ "$REL_DATE" < "$THRESHOLD_DATE" ]; then
+                echo "正在删除 Release 和标签: $TAG_NAME (创建时间: $REL_DATE)"
+                gh release delete "$TAG_NAME" --yes --cleanup-tag || true
+              fi
+            done
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
