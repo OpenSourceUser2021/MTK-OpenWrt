@@ -35,7 +35,7 @@ env:
   CONFIG_FILE: JDCloud-AX6000-Baili-immortalwrt/OpenWrt.config
   CONFIG_FILE_RXTRA: JDCloud-AX6000-Baili-immortalwrt/common-package.config
   DIY_P1_SH: JDCloud-AX6000-Baili-immortalwrt/diy-part1.sh
-  DIY_P2_SH: JDCloud-AX6000-Baili-immortalwrt/diy-part2-Immortalwrt.sh
+  DIY_P2_SH: JDCloud-AX6000-Baili-immortalwrt/diy-part2-openwrt.sh
   SSH_ACTIONS: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true

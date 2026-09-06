@@ -50,8 +50,8 @@ if [ "$(stat -c%s files/etc/openclash/core/clash_meta)" -lt 10485760 ]; then   #
 	exit 1
 fi
 
-fetch "$GEOIP_URL" files/etc/openclash/GeoIP.dat 1048576      # 至少 1MB
-fetch "$GEOSITE_URL" files/etc/openclash/GeoSite.dat 1048576  # 至少 1MB
+fetch "$GEOIP_URL" files/etc/openclash/GeoIP.dat 200000      # geoip-lite 实际约 202KB
+fetch "$GEOSITE_URL" files/etc/openclash/GeoSite.dat 3800000  # geosite 实际约 4MB
 
 # 给内核权限
 chmod +x files/etc/openclash/core/clash*
