@@ -92,13 +92,6 @@ jobs:
         large-packages: false
         swap-storage: false
         
-    - name: Combine Disks
-      uses: easimon/maximize-build-space@v10
-      with:
-        swap-size-mb: 1024
-        temp-reserve-mb: 100
-        root-reserve-mb: 1024
-        
     - name: Checkout
       uses: actions/checkout@v5
       
