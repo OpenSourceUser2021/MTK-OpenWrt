@@ -2,7 +2,7 @@ name: delete-older-releases
 on:
   workflow_dispatch:
   schedule:
-    - cron: 0 22 * * *
+    - cron: '0 22 * * *' # 建议将 cron 表达式用单引号包裹起来
     
 jobs:
   del_runs:
@@ -12,16 +12,16 @@ jobs:
       actions: write   # 删除旧工作流运行记录所需
     steps:
     
-    - name: Delete old workflow runs
-    uses: iamazeem/delete-workflow-runs-action@v1
-    with:
-      token: ${{ secrets.GITHUB_TOKEN }}
-      retain_days: 7
-      keep: 3 # 每个工作流至少保留最近的 3 个记录
-      
-    - name: Delete older releases using GH CLI
-    run: |
-      # 获取所有 Release 的 Tag 名称，跳过最近的 3 个（按创建时间倒序），并批量删除
-      gh release list --limit 100 --json tagName -q '.[].tagName' | tail -n +4 | xargs -I {} gh release delete {} --yes --cleanup-tag
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Delete old workflow runs
+        uses: iamazeem/delete-workflow-runs-action@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          retain_days: 7
+          keep: 3 # 每个工作流至少保留最近的 3 个记录
+          
+      - name: Delete older releases using GH CLI
+        run: |
+          # 获取所有 Release 的 Tag 名称，跳过最近的 3 个（按创建时间倒序），并批量删除
+          gh release list --limit 100 --json tagName -q '.[].tagName' | tail -n +4 | xargs -I {} gh release delete {} --yes --cleanup-tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
