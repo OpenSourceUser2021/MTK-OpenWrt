@@ -70,8 +70,8 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        sudo -E apt-get -qq update
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo bash -c 'bash <(curl -s https://build-scripts.immortalwrt.org/init_build_environment.sh)'
 
         sudo timedatectl set-timezone "$TZ"
         sudo mkdir -p /workdir
@@ -101,18 +101,6 @@ jobs:
         
     - name: Checkout
       uses: actions/checkout@v5
-    - name: Install Build Dependencies
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        DEPS_LIST="$GITHUB_WORKSPACE/.github/build-depends.txt"
-        if [ ! -s "$DEPS_LIST" ]; then
-          echo "::error::missing dependency list $DEPS_LIST (checkout did not run yet?)"
-          exit 1
-        fi
-        sudo -E apt-get -qq install --no-install-recommends $(cat "$DEPS_LIST")
-        sudo -E apt-get -qq autoremove --purge
-        sudo -E apt-get -qq clean
       
     - name: 下载固件源码
       run: |
