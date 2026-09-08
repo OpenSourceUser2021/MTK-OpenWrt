@@ -80,16 +80,12 @@ jobs:
     - name: 清理磁盘空间(Ubuntu)
       uses: jlumbroso/free-disk-space@v1.3.1
       with:
-        # this might remove tools that are actually needed,
-        # when set to "true" but frees about 6 GB
         tool-cache: true
-        
-        # all of these default to true, but feel free to set to
-        # "false" if necessary for your workflow
-        android: false
-        dotnet: false
-        haskell: false
-        large-packages: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
         swap-storage: false
         
     - name: Checkout
