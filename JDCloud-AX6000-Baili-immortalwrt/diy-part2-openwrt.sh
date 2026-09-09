@@ -69,7 +69,12 @@ cat << 'EOF' > package/base-files/files/usr/share/firewall4/templates/time_contr
    // 遍历 UCI 中所有配置了时间限制的防火墙规则
    for (let rule in cursor.get_all("firewall", "rule")) {
        if (rule.start_time || rule.stop_time || rule.weekdays) {
-           let weekdays = rule.weekdays ? sprintf("meta weekdays %s ", join(",", rule.weekdays)) : "";
+           let weekdays = "";
+           if (rule.weekdays) {
+               // 适配新版 fw4 的星期数组解析
+               let wd_list = type(rule.weekdays) == "array" ? rule.weekdays : [rule.weekdays];
+               weekdays = sprintf("meta weekdays { %s } ", join(", ", wd_list));
+           }
            let time = (rule.start_time && rule.stop_time) ? sprintf("meta hour \"%s\"-\"%s\" ", rule.start_time, rule.stop_time) : "";
            let src_mac = rule.src_mac ? sprintf("ether saddr %s ", rule.src_mac) : "";
            let src_ip = rule.src ? sprintf("ip saddr %s ", rule.src) : "";
@@ -98,3 +103,6 @@ config include
 	option path '/usr/share/firewall4/templates/time_control.ucode'
 	option reload '1'
 EOF
+
+
+
