@@ -56,53 +56,7 @@ fetch "$GEOSITE_URL" files/etc/openclash/GeoSite.dat 3800000  # geosite 实际�
 # 给内核权限
 chmod +x files/etc/openclash/core/clash*
 
-# =====================================================================
-# 一劳永逸解决 Nikki 与 防火墙上网时间控制 冲突的自动化脚本
-# =====================================================================
 
-# 1. 创建包含高优先级 nftables 规则生成的 ucode 模板目录
-mkdir -p package/base-files/files/usr/share/firewall4/templates/
-
-# 2. 将一键提拔时间规则到 prerouting 链的 ucode 代码写入固件默认路径
-cat << 'EOF' > package/base-files/files/usr/share/firewall4/templates/time_control.ucode
-{%
-   // 遍历 UCI 中所有配置了时间限制的防火墙规则
-   for (let rule in cursor.get_all("firewall", "rule")) {
-       if (rule.start_time || rule.stop_time || rule.weekdays) {
-           let weekdays = "";
-           if (rule.weekdays) {
-               // 适配新版 fw4 的星期数组解析
-               let wd_list = type(rule.weekdays) == "array" ? rule.weekdays : [rule.weekdays];
-               weekdays = sprintf("meta weekdays { %s } ", join(", ", wd_list));
-           }
-           let time = (rule.start_time && rule.stop_time) ? sprintf("meta hour \"%s\"-\"%s\" ", rule.start_time, rule.stop_time) : "";
-           let src_mac = rule.src_mac ? sprintf("ether saddr %s ", rule.src_mac) : "";
-           let src_ip = rule.src ? sprintf("ip saddr %s ", rule.src) : "";
-           
-           // 只要绑定了 IP 或 MAC，就生成一条最高优先级的 dstnat 规则（即 prerouting 阶段）
-           if (src_mac || src_ip) {
-%}
-table inet fw4 {
-    chain dstnat {
-        {{ src_mac }}{{ src_ip }}{{ weekdays }}{{ time }}counter {{ rule.target || "drop" }} comment "GitHub-Actions-Time-Control"
-    }
-}
-{%
-           }
-       }
-   }
-%}
-EOF
-
-# 3. 自动在固件默认的 /etc/config/firewall 文件末尾追加 include 项，使其启动时加载该脚本
-mkdir -p package/base-files/files/etc/config/
-cat << 'EOF' >> package/base-files/files/etc/config/firewall
-
-config include
-	option type 'script'
-	option path '/usr/share/firewall4/templates/time_control.ucode'
-	option reload '1'
-EOF
 
 
 
