@@ -36,25 +36,31 @@ fetch() {
 }
 
 mkdir -p files/etc/openclash/core
-CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
-GEOIP_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
-GEOSITE_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
 
-# 先下载压缩包到临时文件并校验大小，再解压，避免管道中段失败产生损坏内核
-CLASH_TGZ="$(mktemp)"
-trap 'rm -f "$CLASH_TGZ"' EXIT
-fetch "$CLASH_META_URL" "$CLASH_TGZ" 1048576        # tar.gz 至少 1MB
-tar xOzf "$CLASH_TGZ" > files/etc/openclash/core/clash_meta
-if [ "$(stat -c%s files/etc/openclash/core/clash_meta)" -lt 10485760 ]; then   # 二进制至少 10MB
-	echo "!!! clash_meta 解压结果异常，中止构建" >&2
-	exit 1
+if grep -q "CONFIG_PACKAGE_luci-app-openclash=y" .config 2>/dev/null; then
+	echo ">>> 检测到已启用 luci-app-openclash，开始下载 OpenClash 内核与数据..."
+	CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-arm64.tar.gz"
+	GEOIP_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geoip-lite.dat"
+	GEOSITE_URL="https://github.com/MetaCubeX/meta-rules-dat/releases/download/latest/geosite.dat"
+
+	# 先下载压缩包到临时文件并校验大小，再解压，避免管道中段失败产生损坏内核
+	CLASH_TGZ="$(mktemp)"
+	trap 'rm -f "$CLASH_TGZ"' EXIT
+	fetch "$CLASH_META_URL" "$CLASH_TGZ" 1048576        # tar.gz 至少 1MB
+	tar xOzf "$CLASH_TGZ" > files/etc/openclash/core/clash_meta
+	if [ "$(stat -c%s files/etc/openclash/core/clash_meta)" -lt 10485760 ]; then   # 二进制至少 10MB
+		echo "!!! clash_meta 解压结果异常，中止构建" >&2
+		exit 1
+	fi
+
+	fetch "$GEOIP_URL" files/etc/openclash/GeoIP.dat 200000      # geoip-lite 实际约 202KB
+	fetch "$GEOSITE_URL" files/etc/openclash/GeoSite.dat 3800000  # geosite 实际约 4MB
+
+	# 给内核权限
+	chmod +x files/etc/openclash/core/clash*
+else
+	echo ">>> 未检测到 CONFIG_PACKAGE_luci-app-openclash=y，跳过 OpenClash 内核与数据下载。"
 fi
-
-fetch "$GEOIP_URL" files/etc/openclash/GeoIP.dat 200000      # geoip-lite 实际约 202KB
-fetch "$GEOSITE_URL" files/etc/openclash/GeoSite.dat 3800000  # geosite 实际约 4MB
-
-# 给内核权限
-chmod +x files/etc/openclash/core/clash*
 
 
 
